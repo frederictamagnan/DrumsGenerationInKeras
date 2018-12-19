@@ -10,3 +10,4 @@ This model is supposed to be trained on the [LPD](https://salu133445.github.io/l
 
 ![alt text](https://github.com/frederictamagnan/DrumsGenerationInKeras/blob/master/model.png)
 
+key words : RNN GRU VAE 
