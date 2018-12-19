@@ -1,11 +1,12 @@
 import keras
 from keras import backend as K
 from keras.models import Sequential, Model
-from keras.layers import Input, LSTM, RepeatVector,GRU,Bidirectional,CuDNNGRU,BatchNormalization,Reshape
+from keras.layers import Input, LSTM, RepeatVector,GRU,Bidirectional,CuDNNGRU,BatchNormalization,Reshape,Concatenate
 from keras.layers.core import Flatten, Dense, Dropout, Lambda,Activation
 from keras.optimizers import SGD, RMSprop, Adam
 from keras import objectives
 from keras.models import load_model
+from keras.utils import plot_model
 
 import tensorflowjs as tfjs
 batch_size=256
@@ -14,14 +15,15 @@ INPUT_DIM=9
 LINEAR_HIDDEN_SIZE=[64,32]
 GRU_HIDDEN_SIZE=32
 NUM_DIRECTIONS=2
-
+BEAT=48
 
 def create_gru_vae(seq_len=SEQ_LEN,
                    input_dim=INPUT_DIM,
                    gru_hidden_size=GRU_HIDDEN_SIZE,
                    linear_hidden_size=LINEAR_HIDDEN_SIZE,
                    num_directions=NUM_DIRECTIONS,
-                   epsilon_std=1.):
+                   epsilon_std=1.,
+                   beat=BEAT):
 
 
 
@@ -45,7 +47,8 @@ def create_gru_vae(seq_len=SEQ_LEN,
     linear1d = Dense(input_dim)
     bn2d = BatchNormalization()
 
-    grud = GRU(input_dim, return_sequences=True)
+    grud = GRU(input_dim, return_sequences=True,return_state=True)
+
 
 
 
@@ -53,7 +56,8 @@ def create_gru_vae(seq_len=SEQ_LEN,
 
     #encoder_part
 
-    first=Input(shape=(seq_len, input_dim))
+    # first=Input(batch_shape=(batch_size,seq_len, input_dim))
+    first=Input(shape=(seq_len,input_dim))
     x = gru(first)
     x = bn0(x)
     x = linear0(x)
@@ -77,14 +81,38 @@ def create_gru_vae(seq_len=SEQ_LEN,
 
 
     def decoder(z):
+        n_sections = SEQ_LEN // beat
+        b = beat
+        list_tensor=[]
         x = linear0d(z)
         x = bn0d(x)
         x = Activation('tanh')(x)
         x = Reshape((seq_len, input_dim))(x)
-        print(x.shape)
-        x = grud(x)
-        print(x.shape)
-        last = Activation('sigmoid')(x)
+
+
+        #custom sections
+
+        for i in range(n_sections):
+
+            if i==0:
+                x, hn = grud(x)
+            else:
+                x,hn=grud(x)
+
+
+
+            x = bn1d(x)
+            print(x)
+            x=Lambda(lambda x : x[:,:b,:])(x)
+            print(x)
+            x=linear1d(x)
+            x=bn2d(x)
+            x=Activation('sigmoid')(x)
+            list_tensor.append(x)
+
+        melody=Concatenate(axis=1)(list_tensor)
+        last = Activation('tanh')(melody)
+
         return last
 
     last=decoder(z)
@@ -114,12 +142,11 @@ def create_gru_vae(seq_len=SEQ_LEN,
 import numpy as np
 X=np.load('/home/ftamagna/Documents/_AcademiaSinica/code/DrumFillsNI/data/train_x_drum_reduced_Pop.npy')
 
-X=X[:512]
-print(X.shape)
+X=X[:1024]
 
 model,_,generator=create_gru_vae()
-
-model.fit(X,X,epochs=1)
+plot_model(model, to_file='model.png')
+model.fit(X,X,epochs=4)
 model.save_weights('my_model_weights.h5')
 print("DONE")
 model.load_weights('my_model_weights.h5', by_name=True)
